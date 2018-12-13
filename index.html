@@ -44,6 +44,16 @@
       text-transform: uppercase;
       font-size: 12px;
     }
+    .highlight_true {
+      background-color: green;
+    }
+    .highlight_false{
+      background-color: red;
+    }
+    #symbolFunc{
+      color:black;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
 <body>
@@ -78,7 +88,10 @@
     </td>
     <td>
       <div class="textAreaWrapper">
-        <textarea id="symbolicFunction" title="Symbolic substituted function"></textarea>
+        <div id="symbolFunc">
+
+        </div>
+       <!-- <textarea id="symbolicFunction" title="Symbolic substituted function"></textarea> -->
       </div>
     </td>
   </tr>

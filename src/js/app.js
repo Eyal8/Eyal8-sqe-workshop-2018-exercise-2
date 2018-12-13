@@ -5,54 +5,29 @@ $(document).ready(function () {
     $('#codeSubmissionButton').click(() => {
         let codeToParse = $('#codePlaceholder').val();
         let function_arguments = $('#argumentsPlaceholder').val();
-        let symboledFunction = parseCode(codeToParse, function_arguments);
-        $('#symbolicFunction').val(JSON.stringify(symboledFunction, null, 2));
-    //$('#symbolicFunction').val(symboledFunction);
-    //let all_rows = getData();
-    //  print_table(all_rows);
+        let string_and_object_function = parseCode(codeToParse, function_arguments);
+        insert_rows_to_table(string_and_object_function[1]);
     });
 });
 
-/*const map_to_type = {
-    'function declaration': add_function,
-    'param': add_param,
-    'var_dec': add_var_dec,
-    'assignment expression': add_assignment,
-    'return statement': add_return_statement,
-    'Statement': add_other_statement
-};
-
-function print_table(all_rows){
-    for (let i = 0; i < all_rows.length; i++){
-        let element_type = all_rows[i].element_type;
-        map_to_type[element_type](all_rows[i]);
-    }
-}
-
-function add_param(element){
-    $('.view').append('<tr><td>'+element.line+'</td>' +
-    '<td>'+element.kind+'</td><td>'+element.name +'</td><td></td><td></td></tr>');
-}
-function add_var_dec(element){
-    $('.view').append('<tr><td>'+element.line+'</td>' +
-    '<td>'+element.kind+'</td><td>'+element.name +'</td><td></td><td>'+element.value+'</td></tr>');
-}
-function add_function(element){
-    $('.view').append('<tr><td>'+element.line+'</td>' +
-    '<td>'+element.kind+'</td><td>'+element.name +'</td><td></td><td></td></tr>');
-}
-function add_assignment(element){
-    $('.view').append('<tr><td>'+element.line+'</td>' +
-    '<td>'+element.kind+'</td><td>'+element.name +'</td><td></td><td>'+element.value+'</td></tr>');
-}
-function add_return_statement(element){
-    $('.view').append('<tr><td>'+element.line+'</td>' +
-    '<td>'+element.element_type+'</td><td></td><td></td><td>'+element.value+'</td></tr>');
-}
-function add_other_statement(element){
-    $('.view').append('<tr><td>'+element.line+'</td>' +
-    '<td>'+element.type+'</td><td></td><td>'+element.condition+'</td><td></td></tr>');
-}
-*/
-
+function insert_rows_to_table(final_function_array){
+    let output_table = document.getElementById('symbolFunc');
+    while (output_table.firstChild) {output_table.removeChild(output_table.firstChild);}
+    let span_tag = null;
+    let current_element_to_add = null;
+    for(let i = 0; i < final_function_array.length; i++){
+        span_tag = document.createElement('P');
+        if(final_function_array[i].type != undefined){
+            if(final_function_array[i].isTrue){
+                span_tag.classList.add('highlight_true');
+                current_element_to_add = document.createTextNode(final_function_array[i].value);
+                span_tag.appendChild(current_element_to_add);}
+            else{
+                span_tag.classList.add('highlight_false');
+                current_element_to_add = document.createTextNode(final_function_array[i].value);
+                span_tag.appendChild(current_element_to_add);}}
+        else{
+            current_element_to_add = document.createTextNode(final_function_array[i]);
+            span_tag.appendChild(current_element_to_add);        }
+        output_table.appendChild(span_tag);}}
 
