@@ -138,9 +138,8 @@ describe('The javascript parser', () => {
 describe('The javascript parser', () => {
     it('check globals', () => {
         assert.equal(parseCode('let k = 5;\n' +
-          'let m = 5;\n' +
+          'let m;\n' +
           'function foo(x,y){\n' +
-          '\n' +
           '    if(x+k>y){\n' +
           '         return 5;\n' +
           '    }\n' +
@@ -148,10 +147,10 @@ describe('The javascript parser', () => {
           '}\n' +
           'let p = 7;\n' +
           'p = 5', '1,7')[0],
-        'let k = 5;let m = 5;function foo(x, y){\n' +
+        'function foo(x, y){\n' +
           '\tif(x + 5 > y){\n' +
           '\t\treturn 5;\t}\n' +
-          '\treturn 6;}let p = 7;'
+          '\treturn 6;}'
         );
     });
 });
@@ -267,21 +266,18 @@ describe('The javascript parser', () => {
     });
 });
 describe('The javascript parser', () => {
-    it('check declaration without initializing', () => {
-        assert.equal(parseCode('let b;\nb=7;\nfunction foo(x, y, z){\n    if (b < z) {\n' +
-      '        c = c + 5;\n        return x + y + z + c;\n\t\tif(x>y){\n\t\t\treturn z;\n' +
-      '\t\t}\n                else if(x){\n                        return 5;\n' +
-      '                }\n                else{\n                        return 6;\n' +
-      '                }\n\t} \n}', '2,1,8')[0],
-        'let b = ;function foo(x, y, z){\n' +
-      '\tif(7 < z){\n' +
-      '\t\treturn x + y + z   + c + 5;\t\tif(x > y){\n' +
-      '\t\t\treturn z;\t\t}\n' +
-      '\t\telse if(x){\n' +
-      '\t\t\treturn 5;\t\t}\n' +
-      '\t\telse{\n' +
-      '\t\t\treturn 6;\t\t}\n' +
-      '\t}\n' +
-      '}');
+    it('check assignment of local variable', () => {
+        assert.equal(parseCode('function foo(x,y){\n' +
+          '    let a = x + 1;\n' +
+          '    a = y;\n' +
+          '    if(x+a>a){\n' +
+          '         return 5;\n' +
+          '    }\n' +
+          '    return 6;\n' +
+          '}', '2,1,8')[0],
+        'function foo(x, y){\n' +
+          '\tif(x + y > y){\n' +
+          '\t\treturn 5;\t}\n' +
+          '\treturn 6;}');
     });
 });

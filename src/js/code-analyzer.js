@@ -22,6 +22,7 @@ let function_line_start = 0;
 let function_line_end = 0;
 let globals = [];
 let final_function = '';
+let before_substitution = true;
 let math_it_up = {
     '+': function (x, y) { return x + y; },
     '-': function (x, y) { return x - y; },
@@ -141,6 +142,10 @@ function initialize_data(parsedCode) {
     function_line_end = 0;
     globals = [];
     final_function = '';
+    before_substitution = true;
+    get_function_start_and_end(parsedCode);
+    get_all_globals(parsedCode);
+    before_substitution = false;
     traverse(parsedCode);
 }
 const map_to_type = {
@@ -150,8 +155,7 @@ const map_to_type = {
     'else': add_else_statement,
     'while statement': add_while_statement,
     'return': add_return_statement,
-    'assignment': add_assignment,
-    'declaration': add_declaration
+    'assignment': add_assignment
 };
 function substitute_function(){
     let current_line = '';
@@ -162,7 +166,6 @@ function substitute_function(){
     current_line = '}';
     final_function_array.push(current_line);
     final_function += current_line;
-    add_end_globals();
 }
 function add_function(relevant_line){
     let current_line = '';
@@ -178,12 +181,7 @@ function add_function(relevant_line){
     final_function_array.push(current_line);
     final_function += current_line;
 }
-function  add_end_globals(){
-    for(let i = 0; i < globals.length; i++){
-        final_function_array.push(globals[i]);
-        final_function += globals[i];
-    }
-}
+
 function add_if_statement(relevant_line){
     let current_line = '';
     let if_statement = '';
@@ -240,24 +238,14 @@ function add_return_statement(relevant_line){
     final_function += current_line;
 }
 function add_assignment(relevant_line){
-    if(params.includes(relevant_line.name)){
+    if(params.includes(relevant_line.name) || globals.includes(relevant_line.name)){
         let current_line = '';
         current_line = add_tabs(relevant_line.tabs) + relevant_line.name + ' = ' + relevant_line.value + ';';
         final_function_array.push(current_line);
         final_function += current_line;
     }
 }
-function add_declaration(relevant_line){
-    let current_line = '';
-    current_line = add_tabs(relevant_line.tabs) + 'let ' + relevant_line.name + ' = ' + relevant_line.value + ';';
-    if(relevant_line.isEndGlobal == undefined){
-        final_function_array.push(current_line);
-        final_function += current_line;
-    }
-    else{
-        globals.push(current_line);
-    }
-}
+
 function add_all_predicate_statements(relevant_line){
     let current_line = '';
     let statements = relevant_line.statements;
@@ -276,8 +264,30 @@ function add_tabs(tabs_number){
     }
     return tabs_string;
 }
-
-
+function get_function_start_and_end(o){
+    if (o['type'] == 'FunctionDeclaration') {
+        function_dec(o, true);
+    }
+    for (var i in o) {
+        if (o[i] !== null && typeof(o[i]) == 'object'){get_function_start_and_end(o[i]);}
+    }
+}
+function get_all_globals(o){
+    dec_or_exp(o);
+    for (var i in o) {
+        if (o[i] !== null && typeof(o[i]) == 'object'){get_all_globals(o[i]);}
+    }
+}
+function dec_or_exp(o){
+    for (var i in o) {
+        if(i == 'declarations'){
+            declaration(o);
+        }
+    }
+    if (o['type'] == 'ExpressionStatement') {
+        expression(o);
+    }
+}
 function traverse(o) {
     functions_or_expressions_or_return(o);
     if_while_statements(o);
@@ -307,11 +317,15 @@ function functions_or_expressions_or_return(o) {
         returnstmt(o);
     }
 }
-function function_dec(o){
-    relevant_lines.push({'line': o.loc.start.line, 'type': 'function declaration', 'name': o.id.name, 'tabs': tabs});
-    function_line_start = o.loc.start.line;
-    function_line_end = o.loc.end.line;
-    tabs += 1;
+function function_dec(o, first_time){
+    if(first_time != undefined){
+        function_line_start = o.loc.start.line;
+        function_line_end = o.loc.end.line;
+    }
+    else{
+        relevant_lines.push({'line': o.loc.start.line, 'type': 'function declaration', 'name': o.id.name, 'tabs': tabs});
+        tabs += 1;
+    }
 }
 function if_while_statements(o){
     for (var i in o) {
@@ -336,25 +350,33 @@ function param(o){
         params.push(o.params[i].name);
     }
 }
-
+function check_if_global(dec_line){
+    return (dec_line >= function_line_start && dec_line <= function_line_end);
+}
 function declaration(o){
     for (var i in o.declarations) {
         let value = '';
         if(o.declarations[i].init != null) {
             value = right_expression(o.declarations[i].init);
         }
-        symbolTable.push({'line': o.declarations[i].loc.start.line, 'name': o.declarations[i].id.name, 'value': value});
         let dec_line = o.declarations[i].loc.start.line;
-        if(function_line_start == 0){
-            relevant_lines.push({'line': o.declarations[i].loc.start.line, 'type': 'declaration', 'name': o.declarations[i].id.name, 'value': value, 'tabs': 0});
+        let is_in_function = check_if_global(dec_line);
+        if(!is_in_function){ //global declaration checked on first time
+            check_if_before_substitution(o.declarations[i], value);
+
         }
-        else if(dec_line > function_line_end){
-            relevant_lines.push({'line': o.declarations[i].loc.start.line, 'type': 'declaration', 'name': o.declarations[i].id.name, 'value': value, 'tabs': 0, 'isEndGlobal': true});
+        else if(!before_substitution){ // in function and in substitution phase
+            symbolTable.push({'line': o.declarations[i].loc.start.line, 'name': o.declarations[i].id.name, 'value': value});
         }
     }
 
 }
-
+function check_if_before_substitution(o, value){
+    if(before_substitution){
+        symbolTable.push({'line': o.loc.start.line, 'name': o.id.name, 'value': value});
+        globals.push(o.id.name);
+    }
+}
 function returnstmt(object, statements){
     let value = return_expression(object, statements);
     if(statements != undefined){
@@ -376,23 +398,33 @@ function return_expression(object, statements){
     return value;
 }
 function expression(object, statements){
-    let value = '';
-    let exp = object['expression'];
-    let variable = get_variable(exp);
-    let var_index = check_sym_table(variable);
-
-    value = right_expression(exp.right, statements);
-    if(statements != undefined){
-        statements.push({'line': object['expression'].loc.start.line, 'name': variable, 'type': 'assignment', 'value': value, 'tabs': tabs});
-    }
-    else{ // (statements == undefined)
-        //if(var_index != -1) {
-        symbolTable[var_index].value = value;
-        relevant_lines.push({'line': object['expression'].loc.start.line, 'name': variable, 'type': 'assignment', 'value': value, 'tabs': tabs});
-        //}
-        /*else{
+    let dec_line = object['expression'].loc.start.line;
+    let is_in_function = check_if_global(dec_line);
+    if(!is_in_function){
+        global_expression(object);}
+    else if(!before_substitution){ // in function and in substitution phase
+        let value = '';
+        let exp = object['expression'];
+        let variable = get_variable(exp);
+        let var_index = check_sym_table(variable);
+        value = right_expression(exp.right, statements);
+        if(statements != undefined){
+            statements.push({'line': object['expression'].loc.start.line, 'name': variable, 'type': 'assignment', 'value': value, 'tabs': tabs});
+        }
+        else{ // (statements == undefined)
+            symbolTable[var_index].value = value;
             relevant_lines.push({'line': object['expression'].loc.start.line, 'name': variable, 'type': 'assignment', 'value': value, 'tabs': tabs});
-        }*/
+        }
+    }
+}
+function global_expression(object){
+    if(before_substitution){ // global expression
+        let value = '';
+        let exp = object['expression'];
+        let variable = get_variable(exp);
+        let var_index = check_sym_table(variable);
+        value = right_expression(exp.right);
+        symbolTable[var_index].value = value;
     }
 }
 
