@@ -4,6 +4,7 @@ const parseCode = (codeToParse, function_arguments) => {
     let parsedCode = esprima.parseScript(codeToParse, { loc: true });
     initialize_data(parsedCode);
     substitute_function();
+    join_globals_to_params();
     evaluate_code(function_arguments);
     return [final_function, final_function_array];
 };
@@ -23,27 +24,52 @@ let function_line_end = 0;
 let globals = [];
 let final_function = '';
 let before_substitution = true;
+let is_if = false;
+
 let math_it_up = {
     '+': function (x, y) { return x + y; },
     '-': function (x, y) { return x - y; },
     '*': function (x, y) { return x * y; },
     '/': function (x, y) { return x / y; }
 };
-
+function join_globals_to_params(){
+    for(let i = 0; i < globals.length; i++){
+        for(let j = 0; j < symbolTable.length; j++){
+            if(globals[i] == symbolTable[j].name){
+                argument_with_values[globals[i]] = symbolTable[j].value;
+            }
+        }
+    }
+}
 function evaluate_conditions(lines){
     for(let i = 0; i < lines.length; i++) {
         let current_line = lines[i];
         let if_result = false;
         if (current_line.type == 'if statement' || current_line.type == 'else if statement'){
             evaluate_conditions(current_line.statements);
-            if_result = evaluate_if(current_line, argument_with_values);
-            if(if_result) {
-                true_condition(current_line.line);
-            }
-            else{
-                false_condition(current_line.line);
-            }
+            if_result = evaluate_if(current_line);
+            check_true_or_false(if_result, current_line);
         }
+        if(current_line.type == 'assignment'){
+            update_variable(current_line);
+        }
+    }
+}
+function check_true_or_false(if_result, current_line){
+    if(if_result) {
+        true_condition(current_line.line);
+    }
+    else{
+        false_condition(current_line.line);
+    }
+}
+function update_variable(line){
+    let value = replace_variables_with_values(line.value);
+    if(line.array_index != undefined){
+        argument_with_values[line.name][line.array_index] = value;
+    }
+    else {
+        argument_with_values[line.name] = value;
     }
 }
 function true_condition(line){
@@ -85,9 +111,9 @@ function evaluate_if(line){
     let if_statement = line.value;
     let string_to_evaluate = '';
     if(if_statement.left != undefined){
-        let left_side = if_statement.left.replace(/\s/g, '');
+        let left_side = if_statement.left.toString().replace(/\s/g, '');
         let operator = if_statement.operator;
-        let right_side = if_statement.right.replace(/\s/g, '');
+        let right_side = if_statement.right.toString().replace(/\s/g, '');
         let splited_left = left_side.split('');
         let splited_right = right_side.split('');
         evaluate_one_side_predicate(splited_left);
@@ -98,7 +124,21 @@ function evaluate_if(line){
         if_statement = evaluate_single_predicate(if_statement);
         string_to_evaluate = if_statement;
     }
+    string_to_evaluate = replace_variables_with_values(string_to_evaluate);
     return eval(string_to_evaluate);
+}
+function replace_variables_with_values(string_to_evaluate){
+    let changed = true;
+    while(changed){
+        changed = false;
+        for(let key in argument_with_values){
+            if(string_to_evaluate.toString().includes(key)){
+                string_to_evaluate = string_to_evaluate.replace(key, argument_with_values[key]);
+                changed = true;
+            }
+        }
+    }
+    return string_to_evaluate;
 }
 function evaluate_single_predicate(condition){
     if(condition.charAt(0) == '!'){
@@ -240,7 +280,14 @@ function add_return_statement(relevant_line){
 function add_assignment(relevant_line){
     if(params.includes(relevant_line.name) || globals.includes(relevant_line.name)){
         let current_line = '';
-        current_line = add_tabs(relevant_line.tabs) + relevant_line.name + ' = ' + relevant_line.value + ';';
+        let name = '';
+        if(relevant_line['array_index'] != undefined){
+            name = relevant_line.name + '['+relevant_line.array_index+']';
+        }
+        else{
+            name =  relevant_line.name;
+        }
+        current_line = add_tabs(relevant_line.tabs) + name + ' = ' + relevant_line.value + ';';
         final_function_array.push(current_line);
         final_function += current_line;
     }
@@ -348,6 +395,7 @@ function all_variables(o){
 function param(o){
     for (var i in o.params) {
         params.push(o.params[i].name);
+        symbolTable.push({'name': o.params[i].name, 'value': o.params[i].name});
     }
 }
 function check_if_global(dec_line){
@@ -392,6 +440,9 @@ function return_expression(object, statements){
     if(element.type == 'BinaryExpression'){
         value = right_expression(element.left, statements) + ' ' + element.operator + ' ' + right_expression(element.right, statements);
     }
+    else if(element.type == 'MemberExpression'){
+        value = member_right_expression(element, statements);
+    }
     else{
         value = single_element(element, statements);
     }
@@ -401,30 +452,98 @@ function expression(object, statements){
     let dec_line = object['expression'].loc.start.line;
     let is_in_function = check_if_global(dec_line);
     if(!is_in_function){
-        global_expression(object);}
+        global_expression(object, statements);}
     else if(!before_substitution){ // in function and in substitution phase
-        let value = '';
-        let exp = object['expression'];
-        let variable = get_variable(exp);
+        handle_not_global_expression(object, statements);
+    }
+}
+function handle_not_global_expression(object, statements){
+    let exp = object['expression'];
+    let value = right_expression(exp.right, statements);
+    let variable = get_variable(exp);
+    if(variable.indexOf('[')>-1){ //update value in array
+        handle_array_expression(exp, variable, value, statements);}
+    else{ // not array
         let var_index = check_sym_table(variable);
-        value = right_expression(exp.right, statements);
         if(statements != undefined){
             statements.push({'line': object['expression'].loc.start.line, 'name': variable, 'type': 'assignment', 'value': value, 'tabs': tabs});
         }
-        else{ // (statements == undefined)
-            symbolTable[var_index].value = value;
-            relevant_lines.push({'line': object['expression'].loc.start.line, 'name': variable, 'type': 'assignment', 'value': value, 'tabs': tabs});
+        else {
+            relevant_lines.push({'line': exp.loc.start.line, 'name': variable, 'type': 'assignment', 'value': value, 'tabs': tabs});
+            if(var_index != -1) {
+                symbolTable[var_index].value = value;
+            }
         }
     }
 }
-function global_expression(object){
+function insert_relevant_expression(exp, name, value, index, statements){
+    let var_index = check_sym_table(name);
+    if(statements != undefined){
+        statements.push({'line': exp.loc.start.line, 'name': name, 'type': 'assignment', 'value': value, 'tabs': tabs, 'array_index': index});
+    }
+    else {
+        relevant_lines.push({'line': exp.loc.start.line, 'name': name, 'type': 'assignment', 'value': value, 'tabs': tabs, 'array_index': index});
+        if(var_index != -1) {
+            symbolTable[var_index].value[index] = value;
+        }
+    }
+}
+function not_global_or_param_expression(exp, name, value, index){
+    /*if(globals.includes(name)){
+        relevant_lines.push({'line': exp.loc.start.line, 'name': name, 'type': 'assignment', 'value': value, 'tabs': tabs, 'array_index': index});
+    }*/
+    let is_in_sym = check_if_var_in_sym_table(name);
+    let found = is_in_sym[0];
+    let inner_index = is_in_sym[1];
+    variable_in_sym(found, inner_index, value, index);
+}
+function get_array_indices(splitted_variable){
+    let left_array_index = '';
+    let right_array_index = '';
+    for(let k=0;k<splitted_variable.length;k++){
+        if(splitted_variable[k] == '['){
+            left_array_index = k;        }
+        if(splitted_variable[k] == ']'){
+            right_array_index = k;        }
+    }
+    return [left_array_index, right_array_index];
+}
+function handle_array_expression(exp, variable, value, statements){
+    let splitted_variable = variable.split('');
+    let array_indices = get_array_indices(splitted_variable);
+    let left_array_index = array_indices[0];
+    let right_array_index = array_indices[1];
+    let name = variable.substring(0, left_array_index);
+    let index = variable.substring(left_array_index + 1, right_array_index);
+    if(params.includes(name) || globals.includes(name)){
+        insert_relevant_expression(exp, name, value, index, statements);
+    }
+    else{
+        not_global_or_param_expression(exp, name, value, index, statements);
+    }
+}
+function variable_in_sym(found, inner_index, value, index){
+    if (found) {
+        for(let i = 0; i < symbolTable[inner_index].value.length; i++){
+            if(i == index){
+                if(!Array.isArray(symbolTable[inner_index].value)){
+                    symbolTable[inner_index].value = [];
+                }
+                symbolTable[inner_index].value[i] = value;
+            }
+        }
+    }
+}
+function global_expression(object, statements){
     if(before_substitution){ // global expression
-        let value = '';
         let exp = object['expression'];
+        let value = right_expression(exp.right);
         let variable = get_variable(exp);
         let var_index = check_sym_table(variable);
-        value = right_expression(exp.right);
-        symbolTable[var_index].value = value;
+        if(variable.indexOf('[')>-1){ //update value in array
+            handle_array_expression(exp, variable, value, statements);
+        }
+        else{symbolTable[var_index].value = value;}
     }
 }
 
@@ -442,10 +561,52 @@ function right_expression(object, statements){
         return binaryExpression(object, statements);
     }
     else if(object.type == 'MemberExpression'){
-        return (single_element(object.object, statements) + '[' + single_element(object.property, statements) + ']');
+        return member_right_expression(object, statements);
     }
-
+    else if(object.type == 'ArrayExpression'){
+        for(let i =0;i<object.elements.length;i++){
+            object.elements[i] = single_element(object.elements[i]);
+        }
+        return object.elements;
+    }
     else return single_element(object, statements);
+}
+function check_if_var_in_sym_table(name){
+    let found = false;
+    let inner_index = -1;
+    for(let j=0; j< symbolTable.length;j++){
+        if(symbolTable[j].name == name){
+            found = true;
+            inner_index = j;
+        }
+    }
+    return [found, inner_index];
+}
+function member_right_expression(object, statements){
+    let name = single_element(object.object, statements);
+    let index = single_element(object.property, statements);
+    let member_exp = name + '[' + index + ']';
+    let is_in_sym = check_if_var_in_sym_table(name);
+    let found = is_in_sym[0];
+    let inner_index = is_in_sym[1];
+    if (found) {
+        for(let i = 0; i < symbolTable[inner_index].value.length; i++){
+            if(i == index){
+                if(!is_if){
+                    return check_if_array_member(object, statements, member_exp, inner_index, i);
+                }
+            }
+        }
+    }
+    return member_exp;
+}
+function check_if_array_member(object, statements, member_exp, inner_index, i){
+    if(Array.isArray(symbolTable[inner_index].value)) {
+        return single_element(symbolTable[inner_index].value[i]);
+    }
+    else{
+        return member_exp;
+    }
 }
 function get_numbers_and_variables(elements){
     let numbers = '';
@@ -529,6 +690,9 @@ function binaryExpression(object, statements) {
 }
 
 function single_element(object, statements){
+    if(!isNaN(object)){
+        return object;
+    }
     if(object.type=='UnaryExpression'){
         return (object.operator + single_element(object.argument));
     }
@@ -541,7 +705,7 @@ function single_element(object, statements){
 }
 function identifier(object, statements){
     let var_index = check_sym_table(object.name);
-    if(params.includes(object.name)){
+    if(params.includes(object.name) || globals.includes(object.name)){
         return object.name;
     }
     else if(statements != undefined){
@@ -550,14 +714,19 @@ function identifier(object, statements){
             return statements[predicate_index].value;
         }
     }
+    return identifier_in_sym_table(object, statements, var_index);
+
+}
+function identifier_in_sym_table(object, statements, var_index){
     if(var_index == -1){ // variable not in symbol table
         return object.name;
     }
     else{
+        if(Array.isArray(symbolTable[var_index].value)){ // array
+            return object.name;        }
         return symbolTable[var_index].value;
     }
 }
-
 function stmts(object){
     if (object['type'] == 'IfStatement'){
         ifstmt(object);
@@ -571,11 +740,13 @@ function stmts(object){
 
 function whilestmt(object){
     let value = '';
+    is_if = true;
     let right_element = object['test'];
     if(right_element.type == 'BinaryExpression'){
         value = {'left': right_expression(right_element.left), 'operator': right_element.operator, 'right': right_expression(right_element.right)};
     }
     else{value = single_element(right_element);}
+    is_if = false;
     let kind = 'while statement';
     let while_to_insert = {'line': object.loc.start.line, 'type': kind, 'value': value, 'statements': [], 'tabs': tabs};
     relevant_lines.push(while_to_insert);
@@ -583,15 +754,14 @@ function whilestmt(object){
 }
 
 function ifstmt(object, statements){
+    is_if = true;
     let value = '';
     let right_element = object['test'];
     if(right_element.type == 'BinaryExpression'){
         value = {'left': right_expression(right_element.left), 'operator': right_element.operator, 'right': right_expression(right_element.right)};
     }
-    /* else if(right_element.type == 'LogicalExpression'){
-        value = {'left': right_expression(right_element.left), 'operator': right_element.operator, 'right': right_expression(right_element.right)};
-    }*/
     else{value = single_element(right_element);}
+    is_if = false;
     let kind = get_if_kind(object);
     if(statements == undefined){
         first_if(object, kind, value);
