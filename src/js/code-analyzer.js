@@ -2,10 +2,12 @@ import * as esprima from 'esprima';
 
 const parseCode = (codeToParse, function_arguments) => {
     let parsedCode = esprima.parseScript(codeToParse, { loc: true });
+    console.log(codeToParse);
     initialize_data(parsedCode);
     substitute_function();
     join_globals_to_params();
     evaluate_code(function_arguments);
+    console.log(final_function);
     return [final_function, final_function_array];
 };
 
@@ -483,9 +485,7 @@ function insert_relevant_expression(exp, name, value, index, statements){
     }
     else {
         relevant_lines.push({'line': exp.loc.start.line, 'name': name, 'type': 'assignment', 'value': value, 'tabs': tabs, 'array_index': index});
-        if(var_index != -1) {
-            symbolTable[var_index].value[index] = value;
-        }
+        symbolTable[var_index].value[index] = value;
     }
 }
 function not_global_or_param_expression(exp, name, value, index){
@@ -523,16 +523,15 @@ function handle_array_expression(exp, variable, value, statements){
     }
 }
 function variable_in_sym(found, inner_index, value, index){
-    if (found) {
-        for(let i = 0; i < symbolTable[inner_index].value.length; i++){
-            if(i == index){
-                if(!Array.isArray(symbolTable[inner_index].value)){
-                    symbolTable[inner_index].value = [];
-                }
-                symbolTable[inner_index].value[i] = value;
-            }
+    for(let i = 0; i < symbolTable[inner_index].value.length; i++){
+        if(i == index){
+            /*if(!Array.isArray(symbolTable[inner_index].value)){
+                symbolTable[inner_index].value = [];
+            }*/
+            symbolTable[inner_index].value[i] = value;
         }
     }
+
 }
 function global_expression(object, statements){
     if(before_substitution){ // global expression
@@ -582,6 +581,14 @@ function check_if_var_in_sym_table(name){
     }
     return [found, inner_index];
 }
+function check_if_array_member(object, statements, member_exp, inner_index, i, name){
+  if(params.includes(name) || globals.includes(name)) {
+    return member_exp;
+  }
+  else{
+    return single_element(symbolTable[inner_index].value[i]);
+  }
+}
 function member_right_expression(object, statements){
     let name = single_element(object.object, statements);
     let index = single_element(object.property, statements);
@@ -592,23 +599,17 @@ function member_right_expression(object, statements){
     if (found) {
         for(let i = 0; i < symbolTable[inner_index].value.length; i++){
             if(i == index){
-                if(!is_if){
-                    return check_if_array_member(object, statements, member_exp, inner_index, i);
-                }
+                return check_if_array_member(object, statements, member_exp, inner_index, i, name);
             }
         }
     }
     return member_exp;
 }
-function check_if_array_member(object, statements, member_exp, inner_index, i){
-    if(Array.isArray(symbolTable[inner_index].value)) {
-        return single_element(symbolTable[inner_index].value[i]);
-    }
-    else{
-        return member_exp;
-    }
-}
+
+
+
 function get_numbers_and_variables(elements){
+
     let numbers = '';
     let variables = '';
     for (let i = 0; i < elements.length; i++) {

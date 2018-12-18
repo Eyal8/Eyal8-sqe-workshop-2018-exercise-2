@@ -282,9 +282,15 @@ describe('The javascript parser', () => {
 });
 describe('More array testing', () => {
     it('check array as global variable', () => {
-        assert.equal(parseCode('let w = [2,1,5];\nlet p;\nfunction foo(x, y, z){\n' +
-          '     let b = 2;\n      p = 9;   \n     let c = w[0];\n' +
-          '  w[0] = 2; \n     if (b < w[0]){ \n' +
+        assert.equal(parseCode('\tlet w = [2,1,5];\n' +
+          'let p;\n' +
+          'function foo(x, y, z){\n' +
+          '\n' +
+          '     let b = 2;\n' +
+          '      p = 9;   \n' +
+          '     let c = w[0];\n' +
+          '  w[0] = 2; \n' +
+          '     if (b < w[0]){ \n' +
           '                  c = w[2] + 5;         return x + y + z + c;\n' +
           '               } else if (b < z * 2) {                 c = c + x + 5;       \n' +
           '                   return x + y + z + c;    } else {        \n' +
@@ -292,24 +298,24 @@ describe('More array testing', () => {
           '               }}', '1,2,3')[0],
         'function foo(x, y, z){\n' +
           '\tp = 9;\tw[0] = 2;\tif(2 < w[0]){\n' +
-          '\t\treturn x + y + z   + 10;\t}\n' +
+          '\t\treturn x + y + z   + w[2] + 5;\t}\n' +
           '\telse if(2 < z * 2){\n' +
-          '\t\treturn x + y + z   + x  + 7;\t}\n' +
+          '\t\treturn x + y + z   + w[0] + x  + 5;\t}\n' +
           '\telse{\n' +
-          '\t\treturn x + y + z   + z  + 7;\t}\n' +
+          '\t\treturn x + y + z   + w[0] + z  + 5;\t}\n' +
           '}');
     });
 });
 describe('More array testing', () => {
     it('check array as global variable', () => {
         assert.equal(parseCode('let w = [2,1,5];\n' +
-          'w[2] = 3;\n' +
-          'function foo(x){\n' +
-          '     w[1]=5;\n' +
-          '     return w[2];\n' +
-          '}', '1')[0],
+          '          w[2] = 3;\n' +
+          '          function foo(x){\n' +
+          '              w[1]=5;\n' +
+          '               return w[2];\n' +
+          '          }', '1')[0],
         'w[2] = 3;function foo(){\n' +
-          '\tw[1] = 5;\treturn 3;}');
+          '\tw[1] = 5;\treturn w[2];}');
     });
 });
 
