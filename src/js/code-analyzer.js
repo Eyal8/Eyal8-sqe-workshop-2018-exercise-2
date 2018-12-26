@@ -2,12 +2,10 @@ import * as esprima from 'esprima';
 
 const parseCode = (codeToParse, function_arguments) => {
     let parsedCode = esprima.parseScript(codeToParse, { loc: true });
-    console.log(codeToParse);
     initialize_data(parsedCode);
     substitute_function();
     join_globals_to_params();
     evaluate_code(function_arguments);
-    console.log(final_function);
     return [final_function, final_function_array];
 };
 
