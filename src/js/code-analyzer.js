@@ -24,7 +24,6 @@ let function_line_end = 0;
 let globals = [];
 let final_function = '';
 let before_substitution = true;
-let is_if = false;
 
 let math_it_up = {
     '+': function (x, y) { return x + y; },
@@ -580,12 +579,12 @@ function check_if_var_in_sym_table(name){
     return [found, inner_index];
 }
 function check_if_array_member(object, statements, member_exp, inner_index, i, name){
-  if(params.includes(name) || globals.includes(name)) {
-    return member_exp;
-  }
-  else{
-    return single_element(symbolTable[inner_index].value[i]);
-  }
+    if(params.includes(name) || globals.includes(name)) {
+        return member_exp;
+    }
+    else{
+        return single_element(symbolTable[inner_index].value[i]);
+    }
 }
 function member_right_expression(object, statements){
     let name = single_element(object.object, statements);
@@ -607,7 +606,6 @@ function member_right_expression(object, statements){
 
 
 function get_numbers_and_variables(elements){
-
     let numbers = '';
     let variables = '';
     for (let i = 0; i < elements.length; i++) {
@@ -739,13 +737,11 @@ function stmts(object){
 
 function whilestmt(object){
     let value = '';
-    is_if = true;
     let right_element = object['test'];
     if(right_element.type == 'BinaryExpression'){
         value = {'left': right_expression(right_element.left), 'operator': right_element.operator, 'right': right_expression(right_element.right)};
     }
     else{value = single_element(right_element);}
-    is_if = false;
     let kind = 'while statement';
     let while_to_insert = {'line': object.loc.start.line, 'type': kind, 'value': value, 'statements': [], 'tabs': tabs};
     relevant_lines.push(while_to_insert);
@@ -753,14 +749,12 @@ function whilestmt(object){
 }
 
 function ifstmt(object, statements){
-    is_if = true;
     let value = '';
     let right_element = object['test'];
     if(right_element.type == 'BinaryExpression'){
         value = {'left': right_expression(right_element.left), 'operator': right_element.operator, 'right': right_expression(right_element.right)};
     }
     else{value = single_element(right_element);}
-    is_if = false;
     let kind = get_if_kind(object);
     if(statements == undefined){
         first_if(object, kind, value);
